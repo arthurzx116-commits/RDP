@@ -1,0 +1,58 @@
+name: RDP-PC-Forte
+
+on:
+  workflow_dispatch: # Permite iniciar manualmente pelo botão "Run workflow"
+
+jobs:
+  build:
+    # Tenta usar a máquina mais forte disponível no GitHub Actions
+    # 'windows-latest' = 2-core, 7GB RAM (Padrão)
+    # 'windows-latest-4-core' = 4-core, 16GB RAM (Requer GitHub Pro/Team)
+    # 'windows-latest-8-core' = 8-core, 32GB RAM (Requer GitHub Enterprise)
+    runs-on: windows-latest 
+    timeout-minutes: 360 # Tempo máximo de 6 horas
+
+    steps:
+      - name: 1. Habilitar o RDP
+        shell: powershell
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+          Restart-Service TermService -Force
+
+      - name: 2. Criar Usuário e Senha
+        shell: powershell
+        run: |
+          $User = "Admin"
+          $Password = "P@ssw0rd2024!RDP" # Você pode mudar a senha aqui
+          net user $User $Password /add
+          net localgroup Administradores $User /add
+          net localgroup Administrators $User /add
+
+      - name: 3. Instalar o Ngrok (Túnel de Conexão)
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+          Expand-Archive ngrok.zip -DestinationPath .
+          # Substitua SEU_TOKEN_AQUI pelo seu token do Ngrok (é grátis criar conta)
+          .\ngrok.exe config add-authtoken SEU_TOKEN_AQUI
+
+      - name: 4. Iniciar o Túnel e Manter Vivo
+        shell: powershell
+        run: |
+          # Inicia o túnel na porta 3389 (RDP) em segundo plano
+          Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389" -NoNewWindow
+          Write-Host "Aguardando o túnel iniciar..."
+          Start-Sleep -Seconds 15
+          
+          # Mostra o endereço para conexão nos logs
+          Write-Host "=================================================="
+          Write-Host "Vá em: http://localhost:4040 para ver o link do túnel"
+          Write-Host "Procure por algo como: tcp://0.tcp.ngrok.io:12345"
+          Write-Host "Use esse endereço e a porta para conectar no RDP."
+          Write-Host "Usuário: Admin | Senha: P@ssw0rd2024!RDP"
+          Write-Host "=================================================="
+          
+          # Loop infinito para não desligar a máquina até acabar as 6 horas
+          while ($true) { Start-Sleep -Seconds 3600 }
